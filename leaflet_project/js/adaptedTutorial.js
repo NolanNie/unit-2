@@ -28,7 +28,7 @@ function onEachFeature(feature, layer) {
 
 
 //load the data
-fetch("data/PM25.geojson")
+fetch("data/MegaCities.geojson")
     .then(function(response){
         return response.json();
     })
