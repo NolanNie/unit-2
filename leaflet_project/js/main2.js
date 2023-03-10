@@ -1,13 +1,13 @@
 var map;
-var dataStats;
+var dataStats= {};
 
 //step 1 create map
 function createMap(){
 
     //create the map
     map = L.map('map', {
-        center: [0, 0],
-        zoom: 2
+        center: [40, -100],
+        zoom: 4
     });
 
     //add OSM base tilelayer
@@ -19,6 +19,8 @@ function createMap(){
     getData(map);
 };
 
+
+
 function calcStats(data){
     //create empty array to store all data values
     var allValues = [];
@@ -26,24 +28,26 @@ function calcStats(data){
     for(var city of data.features){
         //loop through each year
         for(var year = 2000; year <= 2021; year+=1){
-              //get population for current year
-              var value = city.properties[String(year)];
-              //add value to array
-              allValues.push(value);
-        }
+            //get population for current year
+            var value = city.properties[String(year)];
+            //add value to array
+            allValues.push(value);
+      }
     }
-    //get minimum value of our array
-    var minValue = Math.min(...allValues)
-
-    return minValue;
-}
+    //get min, max, mean stats for our array
+    dataStats.min = Math.min(...allValues);
+    dataStats.max = Math.max(...allValues);
+    //calculate meanValue
+    var sum = allValues.reduce(function(a, b){return a+b;});
+    dataStats.mean = sum/ allValues.length
+};
 
 //calculate the radius of each proportional symbol
 function calcPropRadius(attValue) {
     //constant factor adjusts symbol sizes evenly
     var minRadius = 5;
     //Flannery Apperance Compensation formula
-    var radius = 1.0083 * Math.pow(attValue/dataStats,0.5715) * minRadius
+    var radius = 1.0083 * Math.pow(attValue/dataStats.min,0.5715) * minRadius
     
     return radius;
 };
@@ -54,6 +58,7 @@ function createPropSymbols(data, attributes){
     //Step 4: Determine which attribute to visualize with proportional symbols
     var attribute = attributes[0]
     console.log(attribute)
+    createLegend(attribute)
 
     //create marker options
     var geojsonMarkerOptions = {
@@ -66,7 +71,7 @@ function createPropSymbols(data, attributes){
     };
 
     L.geoJson(data, {
-        pointToLayer: function (feature, latlng, attributes) {
+        pointToLayer: function (feature, latlng) {
             //Step 5: For each feature, determine its value for the selected attribute
             var attValue = Number(feature.properties[attribute]);
 
@@ -76,7 +81,7 @@ function createPropSymbols(data, attributes){
             layer = L.circleMarker(latlng, geojsonMarkerOptions);
 
             //build popup content string
-            var popupContent = "<p><b>City:</b> " + feature.properties["Core Based Statistical Area"] + "</p><p><b>" + attribute + ":</b> " + feature.properties[attribute] + "</p>";
+            var popupContent = "<p><b>City:</b> " + feature.properties["Core Based Statistical Area"] + "</p><p><b>PM<sub>2.5</sub> in " + attribute + ":</b> " + feature.properties[attribute] + "</p>";
 
             //bind the popup to the circle marker
             layer.bindPopup(popupContent);
@@ -120,7 +125,7 @@ function getData(){
         .then(function(json){
             var attributes = processData(json);
             //calculate minimum data value
-            dataStats = calcStats(json);
+            calcStats(json);
             //call function to create proportional symbols
             createPropSymbols(json, attributes);
             createSequenceControls(attributes);
@@ -129,6 +134,7 @@ function getData(){
 
 //Step 10: Resize proportional symbols according to new attribute values
 function updatePropSymbols(attribute){
+    updateLegend(attribute)
     map.eachLayer(function(layer){
         if (layer.feature && layer.feature.properties[attribute]){
             //access feature properties
@@ -143,7 +149,7 @@ function updatePropSymbols(attribute){
 
             //add formatted attribute to panel content string
             var year = attribute;
-            popupContent += "<p><b>Population in " + year + ":</b> " + props[attribute] + " million</p>";
+            popupContent += "<p><b>PM<sub>2.5</sub> in " + year + ":</b> " + props[attribute] + " million</p>";
 
             //update popup content            
             popup = layer.getPopup();            
@@ -152,24 +158,39 @@ function updatePropSymbols(attribute){
     });
 };
 
-//Step 1: Create new sequence controls
-function createSequenceControls(attributes){
-    //create range input element (slider)
-    var slider = "<input class='range-slider' type='range'></input>";
-    document.querySelector("#panel").insertAdjacentHTML('beforeend',slider);
 
-    //set slider attributes
-    document.querySelector(".range-slider").max = 21;
-    document.querySelector(".range-slider").min = 0;
-    document.querySelector(".range-slider").value = 0;
-    document.querySelector(".range-slider").step = 1;
+//Create new sequence controls
+function createSequenceControls(attributes){   
+    var SequenceControl = L.Control.extend({
+        options: {
+            position: 'bottomleft'
+        },
 
-    //below Example 3.6...add step buttons
-    document.querySelector('#panel').insertAdjacentHTML('beforeend','<button class="step" id="reverse"></button>');
-    document.querySelector('#panel').insertAdjacentHTML('beforeend','<button class="step" id="forward"></button>');
+        onAdd: function () {
+            // create the control container div with a particular class name
+            var container = L.DomUtil.create('div', 'sequence-control-container');
+            
 
-    document.querySelector('#reverse').insertAdjacentHTML('beforeend',"<img src='img/reverse.png'>")
-    document.querySelector('#forward').insertAdjacentHTML('beforeend',"<img src='img/forward.png'>")
+            //create range input element (slider)
+            container.insertAdjacentHTML('beforeend', '<input class="range-slider" type="range">')
+
+            container.querySelector(".range-slider").max = 21;
+            container.querySelector(".range-slider").min = 0;
+            container.querySelector(".range-slider").value = 0;
+            container.querySelector(".range-slider").step = 1;
+
+            //add skip buttons
+            container.insertAdjacentHTML('beforeend', '<button class="step" id="reverse" title="Reverse"><img src="img/reverse.png"></button>'); 
+            container.insertAdjacentHTML('beforeend', '<button class="step" id="forward" title="Forward"><img src="img/forward.png"></button>');
+            
+            //disable any mouse event listeners for the container
+            L.DomEvent.disableClickPropagation(container);
+
+            return container;
+        }
+    });
+
+    map.addControl(new SequenceControl());  
 
     document.querySelectorAll('.step').forEach(function(step){
         step.addEventListener("click", function(){
@@ -209,9 +230,82 @@ function createSequenceControls(attributes){
             updatePropSymbols(attributes[index]);
         })
     })
+
 };
 
+function createLegend(attribute){
+    var LegendControl = L.Control.extend({
+        options: {
+            position: 'bottomright'
+        },
 
+        onAdd: function () {
+            // <div class="legend-control-container leaflet-control"><p><b>2002</b></p></div>
+            
+            // create the control container with a particular class name
+            legendContainer = L.DomUtil.create('div', 'legend-control-container');
+
+             //Step 1: start attribute legend svg string
+            var svg = '<svg id="attribute-legend" width="100px" height="50px">';
+
+            legendContainer.insertAdjacentHTML('beforeend', '<p id="year"><b> PM<sub>2.5</sub> in ' + attribute +'</b></p>');
+            
+            //array of circle names to base loop on  
+            var circles = ["max", "mean", "min"]; 
+
+            //Step 2: loop to add each circle and text to svg string  
+            for (var i=0; i<circles.length; i++){  
+
+                //Step 3: assign the r and cy attributes  
+                var radius = calcPropRadius(dataStats[circles[i]]);  
+                console.log(dataStats[circles[i]]);
+                var cy = 50 - radius;  
+
+                //circle string  
+                svg += '<circle class="legend-circle" id="' + circles[i] + '" r="' + radius + '"cy="' + cy + '" fill="#F47821" fill-opacity="0.8" stroke="#000000" cx="50"/>';  
+            };  
+
+            //close svg string  
+            svg += "</svg>"; 
+            console.log(svg);
+            //add attribute legend svg to container
+            legendContainer.insertAdjacentHTML('beforeend',svg);
+
+            return legendContainer;
+            }
+    });
+
+    map.addControl(new LegendControl());
+};
+
+function updateLegend(attribute){
+    legendContainer.innerHTML = '<p id="year"><b> PM<sub>2.5</sub> in ' + attribute +'</b></p>';
+
+
+    var svg = '<svg id="attribute-legend" width="100px" height="50px">';
+
+    //array of circle names to base loop on  
+    var circles = ["max", "mean", "min"]; 
+
+    //Step 2: loop to add each circle and text to svg string  
+    for (var i=0; i<circles.length; i++){  
+
+        //Step 3: assign the r and cy attributes  
+        var radius = calcPropRadius(dataStats[circles[i]]);  
+        console.log(dataStats[circles[i]]);
+        var cy = 50 - radius;  
+
+        //circle string  
+        svg += '<circle class="legend-circle" id="' + circles[i] + '" r="' + radius + '"cy="' + cy + '" fill="#F47821" fill-opacity="0.8" stroke="#000000" cx="50"/>';  
+    };  
+
+    //close svg string  
+    svg += "</svg>"; 
+    console.log(svg);
+    //add attribute legend svg to container
+    legendContainer.insertAdjacentHTML('beforeend',svg);
+
+};
 
 
 

@@ -1,24 +1,26 @@
 var map;
-var dataStats = {};
+var dataStats= {};
 var legendContainer;
 
-//step 1 create map
+
 function createMap(){
 
     //create the map
     map = L.map('map', {
         center: [40, -100],
-        zoom: 3
+        zoom: 4
     });
 
-    //add OSM base tilelayer
-    L.tileLayer('http://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '&copy; <a href="http://www.openstreetmap.org/copyright">OpenStreetMap contributors</a>'
+    //add StadiaMaps base tilelayer
+    L.tileLayer('https://tiles.stadiamaps.com/tiles/alidade_smooth_dark/{z}/{x}/{y}{r}.png', {
+	    maxZoom: 20,
+	    attribution: '&copy; <a href="https://stadiamaps.com/">Stadia Maps</a>, &copy; <a href="https://openmaptiles.org/">OpenMapTiles</a> &copy; <a href="http://openstreetmap.org">OpenStreetMap</a> contributors'
     }).addTo(map);
 
     //call getData function
     getData(map);
 };
+
 
 
 
@@ -29,37 +31,37 @@ function calcStats(data){
     for(var city of data.features){
         //loop through each year
         for(var year = 2000; year <= 2021; year+=1){
-              //get population for current year
-              var value = city.properties[String(year)];
-              //add value to array
-              allValues.push(value);
-        }
+            //get population for current year
+            var value = city.properties[String(year)];
+            //add value to array
+            allValues.push(value);
+      }
     }
-    //get minimum value of our array
     //get min, max, mean stats for our array
     dataStats.min = Math.min(...allValues);
     dataStats.max = Math.max(...allValues);
     //calculate meanValue
     var sum = allValues.reduce(function(a, b){return a+b;});
-    dataStats.mean = sum/ allValues.length;
-}
+    dataStats.mean = sum/ allValues.length
+};
 
 //calculate the radius of each proportional symbol
 function calcPropRadius(attValue) {
     //constant factor adjusts symbol sizes evenly
     var minRadius = 5;
     //Flannery Apperance Compensation formula
-    var radius = 1.0083 * Math.pow(attValue/dataStats,0.5715) * minRadius
+    var radius = 1.0083 * Math.pow(attValue/dataStats.min,0.5715) * minRadius
     
-    return radius;
+    return radius * 1.25;
 };
 
-//Step 3: Add circle markers for point features to the map
+//Add circle markers for point features to the map
 function createPropSymbols(data, attributes){
 
-    //Step 4: Determine which attribute to visualize with proportional symbols
+    //Determine which attribute to visualize with proportional symbols
     var attribute = attributes[0]
-    createLegend(attribute);
+    
+    createLegend(attribute)
 
     //create marker options
     var geojsonMarkerOptions = {
@@ -72,17 +74,17 @@ function createPropSymbols(data, attributes){
     };
 
     L.geoJson(data, {
-        pointToLayer: function (feature, latlng, attributes) {
-            //Step 5: For each feature, determine its value for the selected attribute
+        pointToLayer: function (feature, latlng) {
+            //For each feature, determine its value for the selected attribute
             var attValue = Number(feature.properties[attribute]);
 
-            //Step 6: Give each feature's circle marker a radius based on its attribute value
+            //Give each feature's circle marker a radius based on its attribute value
             geojsonMarkerOptions.radius = calcPropRadius(attValue);
             //create circle markers
             layer = L.circleMarker(latlng, geojsonMarkerOptions);
 
             //build popup content string
-            var popupContent = "<p><b>City:</b> " + feature.properties["Core Based Statistical Area"] + "</p><p><b>PM<sub>2.5</sub> in " + attribute + ":</b> " + feature.properties[attribute] + "</p>";
+            var popupContent = "<p><b>City:</b> " + feature.properties["Core Based Statistical Area"] + "</p><p><b>PM<sub>2.5</sub> in " + attribute + ":</b> " + feature.properties[attribute] + " ug/m3</p>";
 
             //bind the popup to the circle marker
             layer.bindPopup(popupContent);
@@ -93,7 +95,7 @@ function createPropSymbols(data, attributes){
     }).addTo(map);
 };
 
-//Above Example 3.10...Step 3: build an attributes array from the data
+//Build an attributes array from the data
 function processData(data){
     //empty array to hold attributes
     var attributes = [];
@@ -103,20 +105,17 @@ function processData(data){
 
     //push each attribute name into attributes array
     for (var attribute in properties){
-        //only take attributes with population values
+        //only take attributes with PM2.5 values
         if (attribute.indexOf("20") > -1){
             attributes.push(attribute);
         };
     };
 
-    //check result
-    console.log(attributes.length);
-
     return attributes;
 };
 
 
-//Step 2: Import GeoJSON data
+//Import GeoJSON data
 function getData(){
     //load the data
     fetch("data/PM25.geojson")
@@ -133,8 +132,9 @@ function getData(){
         })
 };
 
-//Step 10: Resize proportional symbols according to new attribute values
+// Resize proportional symbols according to new attribute values
 function updatePropSymbols(attribute){
+    updateLegend(attribute)
     map.eachLayer(function(layer){
         if (layer.feature && layer.feature.properties[attribute]){
             //access feature properties
@@ -149,15 +149,13 @@ function updatePropSymbols(attribute){
 
             //add formatted attribute to panel content string
             var year = attribute;
-            popupContent += "<p><b>PM<sub>2.5</sub> in " + year + ":</b> " + props[attribute] + "</p>";
+            popupContent += "<p><b>PM<sub>2.5</sub> in " + year + ":</b> " + props[attribute] + " ug/m3</p>";
 
             //update popup content            
             popup = layer.getPopup();            
             popup.setContent(popupContent).update();
         };
     });
-
-    updateLegend(attribute)
 };
 
 
@@ -200,14 +198,12 @@ function createSequenceControls(attributes){
         })
     })
 
-    //Step 5: input listener for slider
-    document.querySelector('.range-slider').addEventListener('input', function(){            
-        //sequence
-    });
+    
     document.querySelector('.range-slider').addEventListener('input', function(){
-        //Step 6: get the new index value
+
+        //get the new index value
         var index = this.value;
-        console.log(index)
+
         updatePropSymbols(attributes[index]);
     });
 
@@ -215,18 +211,18 @@ function createSequenceControls(attributes){
         step.addEventListener("click", function(){
             var index = document.querySelector('.range-slider').value;
 
-            //Step 6: increment or decrement depending on button clicked
+            // increment or decrement depending on button clicked
             if (step.id == 'forward'){
                 index++;
-                //Step 7: if past the last attribute, wrap around to first attribute
+                // if past the last attribute, wrap around to first attribute
                 index = index > 21 ? 0 : index;
             } else if (step.id == 'reverse'){
                 index--;
-                //Step 7: if past the first attribute, wrap around to last attribute
+                //if past the first attribute, wrap around to last attribute
                 index = index < 0 ? 21 : index;
             };
 
-            //Step 8: update slider
+            // update slider
             document.querySelector('.range-slider').value = index;
 
             updatePropSymbols(attributes[index]);
@@ -235,6 +231,7 @@ function createSequenceControls(attributes){
 
 };
 
+
 function createLegend(attribute){
     var LegendControl = L.Control.extend({
         options: {
@@ -242,33 +239,39 @@ function createLegend(attribute){
         },
 
         onAdd: function () {
-            // <div class="legend-control-container leaflet-control"><p><b>2002</b></p></div>
             
             // create the control container with a particular class name
             legendContainer = L.DomUtil.create('div', 'legend-control-container');
 
-             //Step 1: start attribute legend svg string
-            var svg = '<svg id="attribute-legend" width="130px" height="130px">';
+             // start attribute legend svg string
+            var svg = '<svg id="attribute-legend" width="170px" height="100px">';
 
             legendContainer.insertAdjacentHTML('beforeend', '<p id="year"><b> PM<sub>2.5</sub> in ' + attribute +'</b></p>');
             
-             //array of circle names to base loop on
-            var circles = ["max", "mean", "min"];
+            //array of circle names to base loop on  
+            var circles = ["max", "mean", "min"]; 
 
-            //Step 2: loop to add each circle and text to svg string
-            for (var i=0; i<circles.length; i++){
-                //circle string
-                svg += '<circle class="legend-circle" id="' + circles[i] + 
-                '" fill="#F47821" fill-opacity="0.8" stroke="#000000" cx="65"/>';
-            };
+            for (var i=0; i<circles.length; i++){  
 
-            //close svg string
-            svg += "</svg>";
-            console.log(svg);
+                //assign the r and cy attributes  
+                var radius = calcPropRadius(dataStats[circles[i]]);
+                var cy = 50 - radius;  
+        
+                var textY = i * 10 + 25; 
+                //circle string 
+                svg += '<circle class="legend-circle" id="' + circles[i] + '" r="' + radius + '"cy="' + cy + '" fill="#F47821" fill-opacity="0.8" stroke="#000000" cx="50"/>';  
+                //text string            
+                svg += '<text id="' + circles[i] + '-text" x="70" y="' + textY + '">' + Math.round(dataStats[circles[i]]*100)/100 + " ug/m3</text>";
+
+            };  
+
+            //close svg string  
+            svg += "</svg>"; 
+
             //add attribute legend svg to container
             legendContainer.insertAdjacentHTML('beforeend',svg);
 
-                return legendContainer;
+            return legendContainer;
             }
     });
 
@@ -279,7 +282,35 @@ function updateLegend(attribute){
     legendContainer.innerHTML = '<p id="year"><b> PM<sub>2.5</sub> in ' + attribute +'</b></p>';
 
 
+    var svg = '<svg id="attribute-legend" width="170px" height="100px">';
+
+    //array of circle names to base loop on  
+    var circles = ["max", "mean", "min"]; 
+
+    //loop to add each circle and text to svg string  
+    for (var i=0; i<circles.length; i++){  
+
+        // assign the r and cy attributes  
+        var radius = calcPropRadius(dataStats[circles[i]]);
+        var cy = 50 - radius;  
+
+        var textY = i * 10 + 25; 
+        //circle string 
+        svg += '<circle class="legend-circle" id="' + circles[i] + '" r="' + radius + '"cy="' + cy + '" fill="#F47821" fill-opacity="0.8" stroke="#000000" cx="50"/>'; 
+
+        //text string            
+        svg += '<text id="' + circles[i] + '-text" x="70" y="' + textY + '">' + Math.round(dataStats[circles[i]]*100)/100 + " ug/m3</text>";
+    };  
+
+    //close svg string  
+    svg += "</svg>"; 
+
+    //add attribute legend svg to container
+    legendContainer.insertAdjacentHTML('beforeend',svg);
+
 };
 
 
-document.addEventListener('DOMContentLoaded',createMap);
+
+
+document.addEventListener('DOMContentLoaded',createMap)
